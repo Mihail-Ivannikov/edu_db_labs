@@ -193,5 +193,336 @@ INSERT INTO `DBLabs`.`Role` (`name`, `description`) VALUES ('Admin', 'The user i
 
 COMMIT;
 ```
+# RESTfull сервіс для управління даними
 
-- RESTfull сервіс для управління даними
+### Файл програми:
+```js
+const express = require("express");
+const userRouter = require("./routes/users");
+const quizRouter = require("./routes/quiz");
+const questRouter = require("./routes/question");
+const app = express();
+const PORT = 3000;
+
+app.use(express.json());
+app.use(userRouter);
+app.use(quizRouter);
+app.use(questRouter);
+app.all("*", (req, res, next) => {
+  next(`The URL does not exists`);
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
+```
+### Доступ до бази даних:
+```js
+const mysql = require("mysql2");
+
+const db = mysql.createConnection({
+  host: "localhost",
+  user: "root",
+  database: "dblabs",
+  password: "0931060568",
+});
+
+db.connect((err) => {
+  if (err) {
+    console.error("Error connecting to MySQL:", err);
+    throw err;
+  }
+  console.log("Connected to MySQL database");
+});
+
+module.exports = db;
+```
+# Реалізація CRUD:
+
+### Контролер для користувачів:
+```js
+const db = require("../dataBase/connection");
+
+exports.getUsers = (req, res) => {
+  db.query("SELECT * FROM user", (err, results) => {
+    if (err) return next("error");
+    res.json(results);
+  });
+};
+
+exports.getById = (req, res) => {
+  const { id } = req.params;
+  db.query("SELECT * FROM user WHERE id = ?", [id], (err, results) => {
+    if (err) return next("error");
+    res.json(results[0]);
+  });
+};
+exports.addUser = (req, res, next) => {
+  if (!req.body) return next("No form data found");
+
+  const user = {
+    id: req.body.id,
+    password: req.body.password,
+    name: req.body.name,
+    surname: req.body.surname,
+    nickname: req.body.nickname,
+    email: req.body.email,
+    picture: req.body.picture,
+    Role_id: req.body.Role_id,
+  };
+
+  db.query("SELECT * FROM role WHERE id = ?", [user.Role_id], (err, result) => {
+    if (err) return next("error");
+
+    if (result.length === 0) {
+      return next("Invalid Role_id.");
+    }
+
+    db.query("INSERT INTO user SET ?", user, (err, result) => {
+      if (err) return next("error");
+
+      res.status(200).json({
+        status: "success",
+        message: "User added",
+      });
+    });
+  });
+};
+
+exports.updateUser = (req, res, next) => {
+  const userId = req.params.id;
+
+  if (!req.body) return next("No form data found");
+
+  const updatedUser = {
+    password: req.body.password,
+    name: req.body.name,
+    surname: req.body.surname,
+    nickname: req.body.nickname,
+    email: req.body.email,
+    picture: req.body.picture,
+    Role_id: req.body.Role_id,
+  };
+
+  db.query(
+    "SELECT * FROM role WHERE id = ?",
+    [updatedUser.Role_id],
+    (err, result) => {
+      if (err) return next("error");
+
+      if (result.length === 0) {
+        return next("Invalid Role_id.");
+      }
+
+      db.query(
+        "UPDATE user SET ? WHERE id = ?",
+        [updatedUser, userId],
+        (err, result) => {
+          if (err) return next("error");
+
+          if (result.affectedRows === 0) {
+            return next("User not found.");
+          }
+
+          res.status(200).json({
+            status: "success",
+            message: "User updated",
+          });
+        }
+      );
+    }
+  );
+};
+
+exports.delete = (req, res) => {
+  const { id } = req.params;
+  db.query("DELETE FROM user WHERE id = ?", [id], (err) => {
+    if (err) return next("error");
+    res.json({ message: "User deleted successfully" });
+  });
+};
+```
+### Маршрути для користувачів
+```js
+const express = require("express");
+const userController = require("../controllers/users");
+const router = express.Router();
+
+router.route("/users").get(userController.getUsers);
+router.route("/users/:id").get(userController.getById);
+router.route("/users").post(userController.addUser);
+router.route("/users/:id").put(userController.updateUser);
+router.route("/users/:id").delete(userController.delete);
+
+module.exports = router;
+```
+### Контролер для опитувань:
+```js
+const db = require("../dataBase/connection");
+
+exports.getQuizes = (req, res) => {
+  db.query("SELECT * FROM quiz", (err, results, fields) => {
+    if (err) return next("error");
+    res.json({ Questions: results.length, results: results });
+  });
+};
+
+exports.getById = (req, res) => {
+  const { id } = req.params;
+  db.query("SELECT * FROM quiz WHERE id = ?", [id], (err, results) => {
+    if (err) return next("error");
+    res.json(results[0]);
+  });
+};
+
+exports.addQuiz = (req, res, next) => {
+  if (!req.body) return next("No form data found");
+  const quiz = {
+    description: req.body.description,
+    name: req.body.name,
+  };
+  db.query("INSERT INTO quiz SET ?", quiz, (err, result) => {
+    if (err) return next("error");
+    res.status(200).json({
+      status: "success",
+      message: "Quiz added",
+    });
+  });
+};
+
+exports.updateQuiz = (req, res, next) => {
+  const quizId = req.params.id;
+
+  if (!req.body) return next("No form data found");
+
+  const updatedQuiz = {
+    description: req.body.description,
+    name: req.body.name,
+  };
+  db.query(
+    "UPDATE quiz SET ? WHERE id = ?",
+    [updatedQuiz, quizId],
+    (err, result) => {
+      if (err) return next("error");
+      if (result.affectedRows === 0) {
+        return next("Quiz not found.");
+      }
+      res.status(200).json({
+        status: "success",
+        message: "Quiz updated",
+      });
+    }
+  );
+};
+
+exports.delete = (req, res) => {
+  const { id } = req.params;
+  db.query("DELETE FROM quiz WHERE id = ?", [id], (err) => {
+    if (err) return next("error");
+    res.json({ message: "Quiz deleted successfully" });
+  });
+};
+```
+### Маршрути для опитувань:
+```js
+const express = require("express");
+const quizController = require("../controllers/quiz");
+const router = express.Router();
+
+router.route("/quiz").get(quizController.getQuizes);
+router.route("/quiz/:id").get(quizController.getById);
+router.route("/quiz").post(quizController.addQuiz);
+router.route("/quiz/:id").put(quizController.updateQuiz);
+router.route("/quiz/:id").delete(quizController.delete);
+
+module.exports = router;
+```
+### Контролер для питань:
+```js
+const db = require("../dataBase/connection");
+
+exports.getQuest = (req, res) => {
+  db.query("SELECT * FROM question", (err, results) => {
+    if (err) return next("error");
+    res.json(results);
+  });
+};
+
+exports.getById = (req, res) => {
+  const { id } = req.params;
+  db.query("SELECT * FROM question WHERE id = ?", [id], (err, results) => {
+    if (err) return next("error");
+    res.json(results[0]);
+  });
+};
+
+exports.addQuest = (req, res, next) => {
+  if (!req.body) return next("No form data found");
+  const quiz = {
+    id: req.body.id,
+    type: req.body.type,
+    number: req.body.number,
+    description: req.body.description,
+    Quiz_id: req.body.Quiz_id,
+  };
+
+  db.query("INSERT INTO question SET ?", quiz, (err, result) => {
+    if (err) return next("error");
+    res.status(200).json({
+      status: "success",
+      message: "Question added",
+    });
+  });
+};
+
+exports.updateQuest = (req, res, next) => {
+  const questId = req.params.id;
+
+  if (!req.body) return next("No form data found");
+
+  const updatedQuest = {
+    id: req.body.id,
+    type: req.body.type,
+    number: req.body.number,
+    description: req.body.description,
+    Quiz_id: req.body.Quiz_id,
+  };
+  db.query(
+    "UPDATE question SET ? WHERE id = ?",
+    [updatedQuest, questId],
+    (err, result) => {
+      if (err) return next("error");
+      if (result.affectedRows === 0) {
+        return next("Question not found.");
+      }
+      res.status(200).json({
+        status: "success",
+        message: "Question updated",
+      });
+    }
+  );
+};
+
+exports.delete = (req, res) => {
+  const { id } = req.params;
+  db.query("DELETE FROM question WHERE id = ?", [id], (err) => {
+    if (err) return next("error");
+    res.json({ message: "Question deleted successfully" });
+  });
+};
+```
+### Маршрути для питань:
+```js
+const express = require("express");
+const questController = require("../controllers/question");
+const router = express.Router();
+
+router.route("/questions").get(questController.getQuest);
+router.route("/questions/:id").get(questController.getById);
+router.route("/questions").post(questController.addQuest);
+router.route("/questions/:id").put(questController.updateQuest);
+router.route("/questions/:id").delete(questController.delete);
+
+module.exports = router;
+```
+
